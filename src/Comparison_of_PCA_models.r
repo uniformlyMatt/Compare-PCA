@@ -1,12 +1,12 @@
 # Comparison of PCA models
 using <- function(...) {
-  libs <- unlist(list(...))
-  req <- unlist(lapply(libs, require, character.only = TRUE))
-  need <- libs[req == FALSE]
-  if (length(need) > 0) {
+    libs <- unlist(list(...))
+    req <- unlist(lapply(libs, require, character.only = TRUE))
+    need <- libs[req == FALSE]
+    if (length(need) > 0) {
     install.packages(need)
     lapply(need, require, character.only = TRUE)
-  }
+    }
 }
 
 # load the required packages
@@ -19,76 +19,46 @@ using(
     "PLNmodels",
     "factoextra",
     "future",
-    "jsonlite"
+    "jsonlite",
+    "here"
 )
+
+# set current working directory
+i_am("src/Comparison_of_PCA_models.r")
 
 # get today's date
 today <- format(Sys.time(), "%b_%d_%Y")
 
 # load the author profiles
 profiles <- read_excel("/media/Bibliometrics/matt analysis/Datasets/PCA_inputs_feb18.xlsx") # nolint
-
-# run PCA and corrplot
 auth_vars <- profiles[, 5:21]
 
-df <- prepare_data(counts = Abundance, covariates = Covariate)
+### Models
+source("src/pca_models.r")
 
-pln_pca_models <- PLNPCA(
-  Abundance ~ 1 + MedianAuthorCount + MedianAuthorPosition +
-    MedianAuthorWeight + MedianSJR + MedianJournalHIndex,
-  data = df,
-  ranks = 1:10
+# build the PCA models
+models <- get_pca_models(auth_vars)
+
+# get the PCA loadings and scores
+loadings <- get_pca_loadings(models)
+scores <- get_pca_scores(models)
+
+# store the scores from the various models with the profiles
+profiles_with_scores <- cbind(
+    profiles,
+    scores
 )
 
-best_ICL <- getBestModel(pln_pca_models, "ICL")
-best_BIC <- getBestModel(pln_pca_models, "BIC")
-
-dev.new()
-plot(best_ICL, ind_cols = df$affil)
-
-dev.new()
-plot(best_BIC, ind_cols = df$affil)
-
-# Build the PCA models
-standard_pca <- prcomp(auth_vars, scale = TRUE)
-probabilistic_pca <- pca(auth_vars, method = "ppca", nPcs = 17, seed = 123)
-poisson_pca <- bestBIC
+### Plots
+source("src/pca_plots.r")
 
 # plot the correlation matrix of the variables
 auth_var_cor <- cor(auth_vars)
-dev.new()
-cplot <- corrplot.mixed(
-    auth_var_cor,
-    lower = "circle",
-    upper = "number",
-    upper.col = "black",
-    number.cex = .7,
-    order = "hclust"
-  )
-cplot <- corrplot(auth_var_cor, type = "lower", order = "hclust")
+plot_correlations(auth_var_cor)
 
-# extract the loadings and PC scores
-standard_pca_loadings <- standard_pca$rotation[, 1:5]
-probabilistic_pca_loadings <- probabilistic_pca@loadings[, 1:5]
-poisson_pca_loadings <- poisson_pca$model_par$B
+# plot the loadings from the various models
+lapply(loadings, plot_loadings)
 
-standard_pca_scores <- standard_pca$x[, 1:5]
-probabilistic_pca_scores <- probabilistic_pca@scores[, 1:5]
-poisson_pca_scores <- poisson_pca$scores
-
-# store the scores from the various models
-scores <- data.frame(
-    c(
-        profiles,
-        standard_pca_scores,
-        probabilistic_pca_scores,
-        poisson_pca_scores
-    )
-)
-
-# scores <- data.frame(profiles, scores)
-
-# # Loadings graph
 # load_vars <- rownames(loadings)
 # loadings <- data.frame(load_vars, loadings)
 # loadings <- melt(loadings, id.vars = c("load_vars"), variable.name = "loading")
